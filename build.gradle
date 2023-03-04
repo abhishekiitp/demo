@@ -29,6 +29,7 @@ dependencies {
     testImplementation 'io.projectreactor:reactor-test'
 
     implementation 'com.apptasticsoftware:rssreader:3.4.1'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
 }
 
 tasks.named('test') {

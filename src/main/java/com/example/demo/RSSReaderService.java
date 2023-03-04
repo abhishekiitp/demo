@@ -2,13 +2,20 @@ package com.example.demo;
 
 import com.apptasticsoftware.rssreader.Item;
 import com.apptasticsoftware.rssreader.RssReader;
+import com.apptasticsoftware.rssreader.util.ItemComparator;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
+import javax.sound.sampled.*;
 import java.io.IOException;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -17,9 +24,77 @@ import java.util.stream.Stream;
 @Slf4j
 public class RSSReaderService {
 
+    private static final String AUDIO_FILE = "audio/ring.wav";
+
+    private static int RUN_COUNT = 8;
+    private static final CharSequence[] KEYWORDS = {
+            "rallies", "jumps", "fmcg",
+            "britannia",
+            "marico",
+            "titan",
+            "srf",
+            "hindalco",
+            "infosys"
+    };
+
     //Get the links from https://economictimes.indiatimes.com/rss.cms
+    // https://www.news18.com/rss/
     // Copied links till MF
     private static final Set<String> URL_List = Set.of(
+            "https://economictimes.indiatimes.com/news/latest-news/rssfeeds/20989204.cms",
+            "https://www.livemint.com/rss/markets",
+            "https://www.news18.com/rss/markets.xml",
+            "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+            "https://www.livemint.com/rss/companies",
+            "https://www.news18.com/rss/business.xml",
+            "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
+            "https://www.livemint.com/rss/opinion",
+            "https://economictimes.indiatimes.com/prime/rssfeeds/69891145.cms",
+            "https://www.livemint.com/rss/money",
+            "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
+            "https://www.livemint.com/rss/industry",
+            "https://economictimes.indiatimes.com/news/rssfeeds/1715249553.cms",
+            "https://www.livemint.com/rss/news",
+            "https://economictimes.indiatimes.com/industry/rssfeeds/13352306.cms",
+            "https://www.livemint.com/rss/Mutual Funds",
+            "https://economictimes.indiatimes.com/small-biz/rssfeeds/5575607.cms"
+
+//            "https://economictimes.indiatimes.com/wealth/rssfeeds/837555174.cms",
+//            "https://economictimes.indiatimes.com/mf/rssfeeds/359241701.cms",
+//            "https://economictimes.indiatimes.com/jobs/rssfeeds/107115.cms",
+//            "https://economictimes.indiatimes.com/opinion/rssfeeds/897228639.cms",
+//            "https://economictimes.indiatimes.com/nri/rssfeeds/7771250.cms",
+//            "https://economictimes.indiatimes.com/magazines/rssfeeds/1466318837.cms",
+//            "https://economictimes.indiatimes.com/podcasts/rssfeeds/70700695.cms",
+//            "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+//            "https://economictimes.indiatimes.com/markets/ipos/fpos/rssfeeds/14655708.cms",
+//            "https://economictimes.indiatimes.com/markets/web-stories/rssfeeds/92205028.cms",
+//            "https://economictimes.indiatimes.com/markets/mind-over-money/rssfeeds/91256725.cms",
+//            "https://economictimes.indiatimes.com/markets/cryptocurrency/rssfeeds/82519373.cms",
+//            "https://economictimes.indiatimes.com/markets/commodities/rssfeeds/1808152121.cms",
+//            "https://economictimes.indiatimes.com/markets/forex/rssfeeds/1150221130.cms",
+//            "https://economictimes.indiatimes.com/markets/live-stream/rssfeeds/93033407.cms",
+//            "https://economictimes.indiatimes.com/markets/expert-view/rssfeeds/50649960.cms",
+//            "https://economictimes.indiatimes.com/markets/market-moguls/rssfeeds/54953131.cms",
+//            "https://economictimes.indiatimes.com/markets/bonds/rssfeeds/2146846.cms",
+//            "https://economictimes.indiatimes.com/rsssymbolfeeds/commodityname-Gold.cms",
+//            "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/53613060.cms",
+//            "https://economictimes.indiatimes.com/prime/technology-and-startups/rssfeeds/63319172.cms",
+//            "https://economictimes.indiatimes.com/prime/consumer/rssfeeds/60187420.cms",
+//            "https://economictimes.indiatimes.com/prime/money-and-markets/rssfeeds/62511286.cms",
+//            "https://economictimes.indiatimes.com/prime/corporate-governance/rssfeeds/63329541.cms",
+//            "https://economictimes.indiatimes.com/prime/media-and-communications/rssfeeds/60187277.cms",
+//            "https://economictimes.indiatimes.com/prime/transportation/rssfeeds/60187459.cms",
+//            "https://economictimes.indiatimes.com/prime/pharma-and-healthcare/rssfeeds/60187434.cms",
+//            "https://economictimes.indiatimes.com/prime/fintech-and-bfsi/rssfeeds/60187373.cms",
+//            "https://economictimes.indiatimes.com/prime/economy-and-policy/rssfeeds/63884214.cms",
+//            "https://economictimes.indiatimes.com/prime/infrastructure/rssfeeds/64403500.cms",
+//            "https://economictimes.indiatimes.com/prime/environment/rssfeeds/63319186.cms",
+//            "https://economictimes.indiatimes.com/prime/energy/rssfeeds/60187444.cms",
+//            "https://economictimes.indiatimes.com/prime/primeshots/rssfeeds/93076384.cms",
+//            "https://economictimes.indiatimes.com/prime/prime-vantage/rssfeeds/92539403.cms",
+//            "https://economictimes.indiatimes.com/prime/prime-decoder/rssfeeds/93459142.cms",
+//            "https://economictimes.indiatimes.com/prime/collections/rssfeeds/93660148.cms",
 //            "https://economictimes.indiatimes.com/mf/mf-news/rssfeeds/1107225967.cms",
 //            "https://economictimes.indiatimes.com/mf/analysis/rssfeeds/314856258.cms",
 //            "https://economictimes.indiatimes.com/mf/elss/rssfeeds/64517243.cms",
@@ -79,76 +154,68 @@ public class RSSReaderService {
 //            "https://economictimes.indiatimes.com/news/sports/rssfeeds/26407562.cms",
 //            "https://economictimes.indiatimes.com/news/science/rssfeeds/39872847.cms",
 //            "https://economictimes.indiatimes.com/news/environment/rssfeeds/2647163.cms",
-//            "https://economictimes.indiatimes.com/news/et-tv/rssfeedsvideo/48897386.cms",
-//            "https://economictimes.indiatimes.com/news/latest-news/rssfeeds/20989204.cms",
-//            "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
-//            "https://economictimes.indiatimes.com/markets/ipos/fpos/rssfeeds/14655708.cms",
-//            "https://economictimes.indiatimes.com/markets/web-stories/rssfeeds/92205028.cms",
-//            "https://economictimes.indiatimes.com/markets/mind-over-money/rssfeeds/91256725.cms",
-//            "https://economictimes.indiatimes.com/markets/cryptocurrency/rssfeeds/82519373.cms",
-//            "https://economictimes.indiatimes.com/markets/commodities/rssfeeds/1808152121.cms",
-//            "https://economictimes.indiatimes.com/markets/forex/rssfeeds/1150221130.cms",
-//            "https://economictimes.indiatimes.com/markets/live-stream/rssfeeds/93033407.cms",
-//            "https://economictimes.indiatimes.com/markets/expert-view/rssfeeds/50649960.cms",
-//            "https://economictimes.indiatimes.com/markets/market-moguls/rssfeeds/54953131.cms",
-//            "https://economictimes.indiatimes.com/markets/bonds/rssfeeds/2146846.cms",
-//            "https://economictimes.indiatimes.com/rsssymbolfeeds/commodityname-Gold.cms",
-//            "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/53613060.cms",
-//            "https://economictimes.indiatimes.com/prime/technology-and-startups/rssfeeds/63319172.cms",
-//            "https://economictimes.indiatimes.com/prime/consumer/rssfeeds/60187420.cms",
-//            "https://economictimes.indiatimes.com/prime/money-and-markets/rssfeeds/62511286.cms",
-//            "https://economictimes.indiatimes.com/prime/corporate-governance/rssfeeds/63329541.cms",
-//            "https://economictimes.indiatimes.com/prime/media-and-communications/rssfeeds/60187277.cms",
-//            "https://economictimes.indiatimes.com/prime/transportation/rssfeeds/60187459.cms",
-//            "https://economictimes.indiatimes.com/prime/pharma-and-healthcare/rssfeeds/60187434.cms",
-//            "https://economictimes.indiatimes.com/prime/fintech-and-bfsi/rssfeeds/60187373.cms",
-//            "https://economictimes.indiatimes.com/prime/economy-and-policy/rssfeeds/63884214.cms",
-//            "https://economictimes.indiatimes.com/prime/infrastructure/rssfeeds/64403500.cms",
-//            "https://economictimes.indiatimes.com/prime/environment/rssfeeds/63319186.cms",
-//            "https://economictimes.indiatimes.com/prime/energy/rssfeeds/60187444.cms",
-//            "https://economictimes.indiatimes.com/prime/primeshots/rssfeeds/93076384.cms",
-//            "https://economictimes.indiatimes.com/prime/prime-vantage/rssfeeds/92539403.cms",
-//            "https://economictimes.indiatimes.com/prime/prime-decoder/rssfeeds/93459142.cms",
-//            "https://economictimes.indiatimes.com/prime/collections/rssfeeds/93660148.cms",
-            "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-            "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
-            "https://economictimes.indiatimes.com/prime/rssfeeds/69891145.cms",
-            "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-            "https://economictimes.indiatimes.com/news/rssfeeds/1715249553.cms",
-            "https://economictimes.indiatimes.com/industry/rssfeeds/13352306.cms",
-            "https://economictimes.indiatimes.com/small-biz/rssfeeds/5575607.cms",
-            "https://economictimes.indiatimes.com/wealth/rssfeeds/837555174.cms",
-            "https://economictimes.indiatimes.com/mf/rssfeeds/359241701.cms",
-            "https://economictimes.indiatimes.com/jobs/rssfeeds/107115.cms",
-            "https://economictimes.indiatimes.com/opinion/rssfeeds/897228639.cms",
-            "https://economictimes.indiatimes.com/nri/rssfeeds/7771250.cms",
-            "https://economictimes.indiatimes.com/magazines/rssfeeds/1466318837.cms",
-            "https://economictimes.indiatimes.com/podcasts/rssfeeds/70700695.cms"
-    );
+//            "https://economictimes.indiatimes.com/news/et-tv/rssfeedsvideo/48897386.cms"
 
-    private static final List<String> KEYWORD_LIST = List.of(
-            "Tech Mahindra"
     );
 
     @PostConstruct
     public void init() {
+        Clip audioClip;
+        try {
+            ClassLoader classloader = Thread.currentThread().getContextClassLoader();
+            InputStream inputStream = classloader.getResourceAsStream(AUDIO_FILE);
+            AudioInputStream audioStream = AudioSystem.getAudioInputStream(Objects.requireNonNull(inputStream));
+            AudioFormat format = audioStream.getFormat();
+            DataLine.Info info = new DataLine.Info(Clip.class, format);
+            audioClip = (Clip) AudioSystem.getLine(info);
+            audioClip.open(audioStream);
+        } catch (UnsupportedAudioFileException | LineUnavailableException | IOException e) {
+            throw new RuntimeException(e);
+        }
+
+//        SecureRandom rand = new SecureRandom();
         RssReader rssReader = new RssReader();
         Set<Item> set = new HashSet<>();
-        URL_List.forEach(url -> {
-                    try {
-                        Stream<Item> stream = rssReader.read(url);
-                        KEYWORD_LIST.forEach(keyword ->
-                                set.addAll(stream.filter(item ->
-                                        item.getTitle().isPresent() && item.getTitle().get().contains(keyword)
-                                ).collect(Collectors.toSet()))
-                        );
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+
+        while (RUN_COUNT > 0) {
+            LocalDateTime now = LocalDateTime.now();
+            ZonedDateTime zonedDateTime = now.atZone(ZoneId.systemDefault()).minusHours(3);
+
+            URL_List.forEach(url -> {
+                        try {
+                            log.info(".");
+                            Stream<Item> stream = rssReader.read(url);
+                            set.addAll(stream.filter(item ->
+                                    item.getPubDateZonedDateTime().isPresent() && item.getPubDateZonedDateTime().get().isAfter(zonedDateTime)
+                            ).filter(item -> item.getTitle().isPresent() && StringUtils.containsAnyIgnoreCase(item.getTitle().get(),
+                                    KEYWORDS)).collect(Collectors.toSet()));
+
+
+                            set.stream().sorted(ItemComparator.newestItemFirst()).forEach(item -> {
+                                log.info("-------------------------------------------");
+                                log.info(item.getTitle().orElse("No Title"));
+                                log.info(item.getLink().orElse("No Link"));
+                                log.info("-------------------------------------------");
+                            });
+
+                            if (set.size() > 0) {
+                                audioClip.start();
+                                set.clear();
+                            }
+                        } catch (IOException e) {
+                            //throw new RuntimeException(e);
+                            log.error("Ran into error for " + url, e);
+                        }
+                        //int sleepTime = (rand.nextInt(5) + 1) * 60 * 1000;
+                        try {
+                            Thread.sleep(60 * 1000);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
                     }
-                }
-        );
-
-        log.info(String.valueOf(set.size()));
+            );
+            log.info("X");
+            RUN_COUNT--;
+        }
     }
-
 }
