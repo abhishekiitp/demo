@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Stock Market Alerts</title>
+    <style>
+        .button {
+            background-color: darkseagreen;
+            border: none;
+            color: black;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 16px;
+            font-weight: bold;
+            width: 30%;
+        }
+
+        .button:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+<button class="button" type="button" th:onclick="|window.location.href='/'|">Load</button>
+<table>
+    <tbody>
+    <tr th:each="item : ${items}">
+        <td th:text="${item.title.get()}"></td>
+        <td><a th:href="${item.link.get()}" target="_blank" rel="noopener noreferrer">Link</a></td>
+    </tr>
+    </tbody>
+</table>
+<button class="button" type="button" th:onclick="|window.location.href='/refresh'|">Refresh</button>
+
+</body>
+</html>

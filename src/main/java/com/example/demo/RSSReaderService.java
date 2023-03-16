@@ -3,9 +3,9 @@ package com.example.demo;
 import com.apptasticsoftware.rssreader.Item;
 import com.apptasticsoftware.rssreader.RssReader;
 import com.apptasticsoftware.rssreader.util.ItemComparator;
-import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import javax.sound.sampled.*;
@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -24,40 +25,73 @@ import java.util.stream.Stream;
 @Slf4j
 public class RSSReaderService {
 
+    private static final Set<Item> ITEM_SET = new HashSet<>();
     private static final String AUDIO_FILE = "audio/ring.wav";
+    private static final long MAX_HOURS = 12L;
+    private boolean running = false;
 
-    private static int RUN_COUNT = 8;
+    private static int RUN_COUNT = 1;
     private static final CharSequence[] KEYWORDS = {
-            "rallies", "jumps", "fmcg",
+            "fmcg",
             "britannia",
             "marico",
             "titan",
             "srf",
             "hindalco",
-            "infosys"
+            "infosys",
+            "upl"
     };
 
     //Get the links from https://economictimes.indiatimes.com/rss.cms
     // https://www.news18.com/rss/
+//    https://www.goodreturns.in/rss/
+    // https://www.zeebiz.com/rss
+    //https://www.moneycontrol.com/india/newsarticle/rssfeeds/rssfeeds.php
+    //https://www.businesstoday.in/rssfeeds/?id=home
     // Copied links till MF
-    private static final Set<String> URL_List = Set.of(
+    private static final List<String> URL_List = List.of(
+            "https://www.businesstoday.in/rssfeeds/?id=home",
+            "https://www.moneycontrol.com/rss/marketreports.xml",
             "https://economictimes.indiatimes.com/news/latest-news/rssfeeds/20989204.cms",
+            "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
             "https://www.livemint.com/rss/markets",
+            "https://www.goodreturns.in/rss/business-news-fb.xml",
+            "https://www.zeebiz.com/india-markets.xml",
             "https://www.news18.com/rss/markets.xml",
+            "https://www.moneycontrol.com/rss/economy.xml",
             "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+            "https://timesofindia.indiatimes.com/rssfeedmostrecent.cms",
             "https://www.livemint.com/rss/companies",
+            "https://www.goodreturns.in/rss/partner-content-fb.xml",
             "https://www.news18.com/rss/business.xml",
+            "https://www.zeebiz.com/world-economy.xml",
+            "https://www.moneycontrol.com/rss/buzzingstocks.xml",
             "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
+            "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
             "https://www.livemint.com/rss/opinion",
+            "https://www.goodreturns.in/rss/news-fb.xml",
+            "https://www.moneycontrol.com/rss/brokeragerecos.xml",
             "https://economictimes.indiatimes.com/prime/rssfeeds/69891145.cms",
+            "https://timesofindia.indiatimes.com/rssfeeds/1898055.cms",
             "https://www.livemint.com/rss/money",
+            "https://www.goodreturns.in/rss/money-partner-content-fb.xml",
+            "https://www.moneycontrol.com/rss/business.xml",
             "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
             "https://www.livemint.com/rss/industry",
+            "https://www.goodreturns.in/rss/goodreturns-fb.xml",
+            "https://www.moneycontrol.com/rss/mostpopular.xml",
             "https://economictimes.indiatimes.com/news/rssfeeds/1715249553.cms",
             "https://www.livemint.com/rss/news",
+            "https://www.goodreturns.in/rss/classroom-fb.xml",
+            "https://www.moneycontrol.com/rss/latestnews.xml",
             "https://economictimes.indiatimes.com/industry/rssfeeds/13352306.cms",
-            "https://www.livemint.com/rss/Mutual Funds",
-            "https://economictimes.indiatimes.com/small-biz/rssfeeds/5575607.cms"
+            "https://www.livemint.com/rss/Mutual%20Funds",
+            "https://www.goodreturns.in/rss/buy-insurance-online-fb.xml",
+            "https://economictimes.indiatimes.com/small-biz/rssfeeds/5575607.cms",
+            "https://www.goodreturns.in/rss/personal-finance-fb.xml",
+            "https://www.goodreturns.in/rss/shares-to-buy-fb.xml",
+            "https://www.goodreturns.in/rss/tag-budget.xml",
+            "https://tradebrains.in/feed/"
 
 //            "https://economictimes.indiatimes.com/wealth/rssfeeds/837555174.cms",
 //            "https://economictimes.indiatimes.com/mf/rssfeeds/359241701.cms",
@@ -158,64 +192,99 @@ public class RSSReaderService {
 
     );
 
-    @PostConstruct
+    @Async
     public void init() {
-        Clip audioClip;
-        try {
-            ClassLoader classloader = Thread.currentThread().getContextClassLoader();
-            InputStream inputStream = classloader.getResourceAsStream(AUDIO_FILE);
-            AudioInputStream audioStream = AudioSystem.getAudioInputStream(Objects.requireNonNull(inputStream));
-            AudioFormat format = audioStream.getFormat();
-            DataLine.Info info = new DataLine.Info(Clip.class, format);
-            audioClip = (Clip) AudioSystem.getLine(info);
-            audioClip.open(audioStream);
-        } catch (UnsupportedAudioFileException | LineUnavailableException | IOException e) {
-            throw new RuntimeException(e);
+        if (running) {
+            return;
+        } else {
+            running = true;
         }
+        ITEM_SET.clear();
 
-//        SecureRandom rand = new SecureRandom();
         RssReader rssReader = new RssReader();
-        Set<Item> set = new HashSet<>();
 
         while (RUN_COUNT > 0) {
             LocalDateTime now = LocalDateTime.now();
-            ZonedDateTime zonedDateTime = now.atZone(ZoneId.systemDefault()).minusHours(3);
+            ZonedDateTime zonedDateTime = now.atZone(ZoneId.systemDefault()).minusHours(MAX_HOURS);
 
             URL_List.forEach(url -> {
                         try {
                             log.info(".");
                             Stream<Item> stream = rssReader.read(url);
-                            set.addAll(stream.filter(item ->
-                                    item.getPubDateZonedDateTime().isPresent() && item.getPubDateZonedDateTime().get().isAfter(zonedDateTime)
-                            ).filter(item -> item.getTitle().isPresent() && StringUtils.containsAnyIgnoreCase(item.getTitle().get(),
-                                    KEYWORDS)).collect(Collectors.toSet()));
-
-
-                            set.stream().sorted(ItemComparator.newestItemFirst()).forEach(item -> {
-                                log.info("-------------------------------------------");
-                                log.info(item.getTitle().orElse("No Title"));
-                                log.info(item.getLink().orElse("No Link"));
-                                log.info("-------------------------------------------");
-                            });
+                            Set<Item> set = stream.filter(item ->
+                            {
+                                if (item.getPubDate().isPresent()) {
+                                    item.setPubDate(item.getPubDate().get().replace("+5:30", " +0530"));
+                                    item.setPubDate(item.getPubDate().get().replace(" +05:30", " +0530"));
+                                }
+                                return item.getPubDateZonedDateTime().isPresent() && item.getPubDateZonedDateTime().get().isAfter(zonedDateTime);
+                            }).filter(item -> item.getTitle().isPresent() && StringUtils.containsAnyIgnoreCase(item.getTitle().get(),
+                                    KEYWORDS)).collect(Collectors.toSet());
 
                             if (set.size() > 0) {
-                                audioClip.start();
-                                set.clear();
+                                playClip();
+                                ITEM_SET.addAll(set);
+                                ITEM_SET.stream().sorted(ItemComparator.newestItemFirst()).forEach(item -> {
+                                    log.info("-------------------------------------------");
+                                    log.info(item.getTitle().orElse("No Title"));
+                                    log.info(item.getLink().orElse("No Link"));
+                                    log.info("-------------------------------------------");
+                                });
                             }
-                        } catch (IOException e) {
-                            //throw new RuntimeException(e);
+
+                            Thread.sleep(10 * 1000);
+
+                        } catch (IOException | IllegalArgumentException | InterruptedException e) {
                             log.error("Ran into error for " + url, e);
                         }
-                        //int sleepTime = (rand.nextInt(5) + 1) * 60 * 1000;
-                        try {
-                            Thread.sleep(60 * 1000);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
+
                     }
             );
             log.info("X");
             RUN_COUNT--;
         }
+        running = false;
+    }
+
+    private void playClip() {
+        class AudioListener implements LineListener {
+            private boolean done = false;
+
+            @Override
+            public synchronized void update(LineEvent event) {
+                LineEvent.Type eventType = event.getType();
+                if (eventType == LineEvent.Type.STOP || eventType == LineEvent.Type.CLOSE) {
+                    done = true;
+                    notifyAll();
+                }
+            }
+
+            public synchronized void waitUntilDone() throws InterruptedException {
+                while (!done) {
+                    wait();
+                }
+            }
+        }
+        AudioListener listener = new AudioListener();
+        try (InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(AUDIO_FILE)) {
+            try (AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(Objects.requireNonNull(inputStream))) {
+                try (Clip clip = AudioSystem.getClip()) {
+                    clip.addLineListener(listener);
+                    clip.open(audioInputStream);
+                    clip.start();
+                    listener.waitUntilDone();
+                } catch (LineUnavailableException | InterruptedException e) {
+                    log.error("",e);
+                }
+            } catch (UnsupportedAudioFileException e) {
+                log.error("",e);
+            }
+        } catch (IOException e) {
+            log.error("",e);
+        }
+    }
+
+    public Set<Item> getData() {
+        return ITEM_SET;
     }
 }
